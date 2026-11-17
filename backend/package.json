@@ -1,0 +1,38 @@
+{
+  "name": "medimind-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node.js/Express API for the MediMind healthcare platform",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:setup": "node src/database/setup.js",
+    "seed": "node src/database/seed.js",
+    "explain": "node src/database/explain.js",
+    "aggregations": "node src/database/runAggregations.js",
+    "backup": "node src/database/backup.js",
+    "restore": "node src/database/restore.js",
+    "test": "node --test --test-concurrency=1 \"tests/**/*.test.js\""
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.4",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.12.1",
+    "morgan": "^1.12.1",
+    "multer": "^2.5.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^11.3.0",
+    "supertest": "^7.3.2"
+  }
+}

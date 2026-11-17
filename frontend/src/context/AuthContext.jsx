@@ -1,23 +1,61 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { authApi, getToken, setToken } from '../services/api'
 
 const AuthContext = createContext(null)
+const USER_KEY = 'medimind-user'
+
+function storedUser() {
+  if (!getToken()) return null
+  try { return JSON.parse(localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY)) } catch { return null }
+}
+
+function storeUser(user, remember) {
+  try {
+    localStorage.removeItem(USER_KEY)
+    sessionStorage.removeItem(USER_KEY)
+    if (user) (remember ? localStorage : sessionStorage).setItem(USER_KEY, JSON.stringify(user))
+  } catch { /* storage unavailable */ }
+}
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('medimind-user')) } catch { return null }
-  })
+  const [user, setUser] = useState(storedUser)
 
-  function signIn(role = 'patient', name = '') {
-    const roleNames = { patient: 'Tharushi Kumari', doctor: 'Dr. Shabjan', admin: 'Vihanga B. Hettiarachchi' }
-    const nextUser = { role, name: name || roleNames[role], initials: role === 'doctor' ? 'BO' : role === 'admin' ? 'NF' : 'VH' }
-    localStorage.setItem('medimind-user', JSON.stringify(nextUser))
+  const signOut = useCallback(() => { setToken(null); storeUser(null); setUser(null) }, [])
+
+  function startSession({ token, user: nextUser }, remember = true) {
+    setToken(token, remember)
+    storeUser(nextUser, remember)
     setUser(nextUser)
     return nextUser
   }
 
-  function signOut() { localStorage.removeItem('medimind-user'); setUser(null) }
-  return <AuthContext.Provider value={{ user, signIn, signOut }}>{children}</AuthContext.Provider>
+  // The role always comes from the server, never from the sign-in form.
+  async function signIn(credentials, remember = true) { return startSession(await authApi.login(credentials), remember) }
+  async function register(details) { return startSession(await authApi.register(details)) }
+
+  function updateUser(changes) {
+    setUser(previous => {
+      const next = { ...previous, ...changes }
+      storeUser(next, Boolean(localStorage.getItem(USER_KEY)))
+      return next
+    })
+  }
+
+  useEffect(() => {
+    window.addEventListener('medimind:unauthorized', signOut)
+    return () => window.removeEventListener('medimind:unauthorized', signOut)
+  }, [signOut])
+
+  useEffect(() => {
+    if (!getToken()) return
+    authApi.me().then(body => {
+      setUser(body.user)
+      storeUser(body.user, Boolean(localStorage.getItem(USER_KEY)))
+    }).catch(() => {})
+  }, [])
+
+  return <AuthContext.Provider value={{ user, signIn, register, signOut, updateUser }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

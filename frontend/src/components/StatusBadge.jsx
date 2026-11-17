@@ -1,4 +1,7 @@
+import { statusLabel } from '../utils/format'
+
 export default function StatusBadge({ children }) {
-  const tone = String(children).toLowerCase().replaceAll(' ', '-')
-  return <span className={`status status-${tone}`}>{children}</span>
+  const label = statusLabel(children)
+  const tone = label.toLowerCase().replaceAll(' ', '-')
+  return <span className={`status status-${tone}`}>{label}</span>
 }

@@ -1,0 +1,668 @@
+openapi: 3.1.0
+info:
+  title: MediMind API
+  version: 1.0.0
+  description: |
+    Express API for the MediMind educational healthcare platform. All data is synthetic.
+    Every list endpoint accepts `page` (default 1) and `limit` (default 20, max 100).
+    Every error response has a `message` field.
+servers:
+  - url: http://localhost:5000/api
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-f0-9]{24}$' }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  responses:
+    BadRequest:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: 'Invalid request: startAt - Must be an ISO 8601 date-time', details: [{ field: startAt, message: Must be an ISO 8601 date-time }] }
+    Unauthorized:
+      description: Missing, invalid or expired token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: Please sign in to continue. }
+    Forbidden:
+      description: Authenticated but not allowed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: You are not authorised to view this patient's clinical records. }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: Doctor not found. }
+    Conflict:
+      description: Conflicting state
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: This time slot has just been booked. Please choose another time. }
+  schemas:
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+        details:
+          type: array
+          items:
+            type: object
+            properties: { field: { type: string }, message: { type: string } }
+    Pagination:
+      type: object
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        totalPages: { type: integer }
+    SessionUser:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [patient, doctor, admin] }
+        name: { type: string }
+        initials: { type: string }
+        profileId: { type: [string, 'null'] }
+    AuthResponse:
+      type: object
+      properties:
+        token: { type: string }
+        user: { $ref: '#/components/schemas/SessionUser' }
+    Allergy:
+      type: object
+      required: [substance]
+      properties:
+        substance: { type: string }
+        severity: { type: string, enum: [Mild, Moderate, Severe] }
+        notes: { type: string }
+    Patient:
+      type: object
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        initials: { type: string }
+        dateOfBirth: { type: string, format: date-time }
+        age: { type: [integer, 'null'] }
+        gender: { type: string, enum: [female, male, other, undisclosed] }
+        bloodGroup: { type: string }
+        contact: { type: object, properties: { email: { type: string }, phone: { type: string } } }
+        address: { type: object, properties: { line1: { type: string }, city: { type: string }, country: { type: string } } }
+        allergies: { type: array, items: { $ref: '#/components/schemas/Allergy' } }
+        emergencyContact: { type: object, properties: { name: { type: string }, relationship: { type: string }, phone: { type: string } } }
+    Availability:
+      type: object
+      properties:
+        dayOfWeek: { type: integer, minimum: 0, maximum: 6, description: 0 = Sunday }
+        startTime: { type: string, example: '09:00' }
+        endTime: { type: string, example: '17:00' }
+        slotMinutes: { type: integer, default: 30 }
+    Doctor:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        initials: { type: string }
+        specialty: { type: string }
+        hospital: { type: string }
+        city: { type: string }
+        experienceYears: { type: integer }
+        experience: { type: string, example: 12 years }
+        consultationFee: { type: number }
+        fee: { type: string, example: Rs. 3,500 }
+        rating: { type: number }
+        reviews: { type: integer }
+        about: { type: string }
+        expertise: { type: array, items: { type: string } }
+        color: { type: string }
+        verificationStatus: { type: string, enum: [pending, verified, rejected] }
+        availability: { type: array, items: { $ref: '#/components/schemas/Availability' } }
+        nextAvailableAt: { type: [string, 'null'], format: date-time }
+    Appointment:
+      type: object
+      properties:
+        id: { type: string }
+        patientId: { type: string }
+        doctorId: { type: string }
+        startAt: { type: string, format: date-time }
+        endAt: { type: string, format: date-time }
+        status: { type: string, enum: [pending, confirmed, checked_in, completed, cancelled, no_show] }
+        consultationType: { type: string, enum: [in_person, online] }
+        reason: { type: string }
+        rescheduleCount: { type: integer }
+        doctor: { type: object, properties: { id: { type: string }, name: { type: string }, initials: { type: string }, specialty: { type: string }, hospital: { type: string }, color: { type: string } } }
+        patient: { type: object, properties: { id: { type: string }, name: { type: string }, initials: { type: string }, age: { type: [integer, 'null'] } } }
+    MedicalRecord:
+      type: object
+      properties:
+        id: { type: string }
+        patientId: { type: string }
+        doctorId: { type: string }
+        appointmentId: { type: [string, 'null'] }
+        visitAt: { type: string, format: date-time }
+        diagnoses: { type: array, items: { type: object, properties: { code: { type: string }, description: { type: string } } } }
+        vitals: { type: object, properties: { systolicBP: { type: number }, diastolicBP: { type: number }, heartRate: { type: number }, temperatureC: { type: number }, weightKg: { type: number } } }
+        medications: { type: array, items: { type: object, properties: { name: { type: string }, dosage: { type: string }, frequency: { type: string }, durationDays: { type: integer } } } }
+        notes: { type: string }
+        followUpRequired: { type: boolean }
+        followUpInDays: { type: integer }
+        doctor: { type: object, properties: { id: { type: string }, name: { type: string }, specialty: { type: string }, hospital: { type: string } } }
+    Document:
+      type: object
+      properties:
+        id: { type: string }
+        patientId: { type: string }
+        name: { type: string }
+        category: { type: string, enum: [Laboratory, Clinical note, Imaging, Prescription, Patient upload, Other] }
+        provider: { type: string }
+        mimeType: { type: string, enum: [application/pdf, image/jpeg, image/png] }
+        type: { type: string, enum: [PDF, JPG, PNG] }
+        sizeBytes: { type: integer }
+        checksum: { type: string, description: SHA-256 hex digest }
+        uploadedAt: { type: string, format: date-time }
+    ChatReply:
+      type: object
+      properties:
+        answer: { type: string }
+        sources: { type: array, items: { type: string } }
+        disclaimer: { type: string }
+        emergency: { type: boolean }
+        fallback: { type: boolean, description: true when the AI service was unavailable }
+        conversationId: { type: string }
+
+paths:
+  /health:
+    get:
+      security: []
+      summary: Service health
+      responses:
+        '200': { description: OK, content: { application/json: { example: { status: ok, database: connected } } } }
+
+  /auth/register:
+    post:
+      security: []
+      summary: Register a patient account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8, description: Must contain a letter and a number }
+                phone: { type: string }
+                dateOfBirth: { type: string, format: date }
+            example: { name: Vihanga A. Hettiarachchi, email: vihanga@example.test, password: Secure1234 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /auth/login:
+    post:
+      security: []
+      summary: Sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email, password], properties: { email: { type: string }, password: { type: string } } }
+            example: { email: patient@medimind.test, password: MediMind123 }
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+              example: { token: eyJhbGciOi..., user: { id: 6650f0c2a1b2c3d4e5f60718, email: patient@medimind.test, role: patient, name: Vihanga A. Hettiarachchi, initials: VA, profileId: 6650f0c2a1b2c3d4e5f60719 } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { description: Incorrect email or password, content: { application/json: { example: { message: Incorrect email or password. } } } }
+  /auth/me:
+    get:
+      summary: Current user
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { user: { $ref: '#/components/schemas/SessionUser' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /patients:
+    get:
+      summary: List patients (doctor sees assigned patients only)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - { name: q, in: query, schema: { type: string } }
+        - { name: allergy, in: query, schema: { type: string } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string, example: -createdAt } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Patient' } }, pagination: { $ref: '#/components/schemas/Pagination' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /patients/me:
+    get:
+      summary: Own patient profile
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Patient' } } } } } }
+  /patients/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      summary: Authorised patient detail
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Patient' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      summary: Update allowed profile fields (own profile only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                fullName: { type: string }
+                dateOfBirth: { type: string, format: date }
+                gender: { type: string }
+                bloodGroup: { type: string }
+                contact: { type: object, properties: { phone: { type: string } } }
+                address: { type: object }
+                allergies: { type: array, items: { $ref: '#/components/schemas/Allergy' } }
+                emergencyContact: { type: object }
+            example: { allergies: [{ substance: Penicillin, severity: Moderate }], emergencyContact: { name: Lakshitha Banda, relationship: Brother } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Patient' } } } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /doctors:
+    get:
+      summary: Search, filter and paginate doctors
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - { name: q, in: query, schema: { type: string }, description: Matches name, specialty or hospital }
+        - { name: specialty, in: query, schema: { type: string } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: availableOn, in: query, schema: { type: string, format: date } }
+        - { name: minRating, in: query, schema: { type: number } }
+        - { name: status, in: query, schema: { type: string }, description: Admin only }
+        - { name: sort, in: query, schema: { type: string, default: -rating } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Doctor' } }, pagination: { $ref: '#/components/schemas/Pagination' }, specialties: { type: array, items: { type: string } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      summary: Create a doctor account (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, fullName, specialty]
+              properties:
+                email: { type: string }
+                password: { type: string }
+                fullName: { type: string }
+                specialty: { type: string }
+                hospital: { type: string }
+                consultationFee: { type: number }
+                availability: { type: array, items: { $ref: '#/components/schemas/Availability' } }
+                verificationStatus: { type: string, default: verified }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Doctor' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /doctors/me:
+    get:
+      summary: Own doctor profile
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Doctor' } } } } } }
+  /doctors/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      summary: Doctor detail
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Doctor' } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      summary: Update doctor profile or availability (own profile or admin)
+      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
+      responses:
+        '200': { description: Updated }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /doctors/{id}/slots:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      summary: Slots and availability state for one day
+      parameters: [{ name: date, in: query, required: true, schema: { type: string, format: date } }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              example: { data: [{ startAt: '2026-11-18T03:30:00.000Z', endAt: '2026-11-18T04:00:00.000Z', status: available, available: true }] }
+  /doctors/{id}/verification:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      summary: Set doctor verification status (admin)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { verificationStatus: { type: string, enum: [pending, verified, rejected] } } } } } }
+      responses:
+        '200': { description: Updated }
+
+  /appointments:
+    post:
+      summary: Book a conflict-free appointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [doctorId, startAt, reason]
+              properties:
+                doctorId: { type: string }
+                patientId: { type: string, description: Admin only }
+                startAt: { type: string, format: date-time, description: Must match a slot from /doctors/{id}/slots }
+                consultationType: { type: string, enum: [in_person, online] }
+                reason: { type: string }
+            example: { doctorId: 6650f0c2a1b2c3d4e5f60720, startAt: '2026-11-18T03:30:00.000Z', consultationType: online, reason: Routine checkup }
+      responses:
+        '201': { description: Booked, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Appointment' } } } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    get:
+      summary: Role-filtered appointment list
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - { name: status, in: query, schema: { type: string }, description: Comma-separated statuses }
+        - { name: scope, in: query, schema: { type: string, enum: [upcoming, past] } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: doctorId, in: query, schema: { type: string }, description: Admin only }
+        - { name: patientId, in: query, schema: { type: string }, description: Admin or doctor }
+        - { name: sort, in: query, schema: { type: string, example: -startAt } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Appointment' } }, pagination: { $ref: '#/components/schemas/Pagination' } } } } } }
+  /appointments/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      summary: Appointment detail
+      responses:
+        '200': { description: OK }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: Change status or reschedule
+      description: |
+        Patients can cancel (at least `patientCancellationHours` ahead) or reschedule their own appointments.
+        Doctors can confirm, check in, complete, mark no-show or cancel their assigned appointments.
+        Administrators can do both.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string, enum: [pending, confirmed, checked_in, completed, cancelled, no_show] }
+                startAt: { type: string, format: date-time }
+                cancellationReason: { type: string }
+            examples:
+              cancel: { value: { status: cancelled, cancellationReason: Feeling better } }
+              reschedule: { value: { startAt: '2026-11-19T04:30:00.000Z' } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Appointment' } } } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /medical-records:
+    post:
+      summary: Create a clinical record for an assigned patient (doctor)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patientId]
+              properties:
+                patientId: { type: string }
+                appointmentId: { type: string, description: Completes the appointment in the same transaction }
+                visitAt: { type: string, format: date-time }
+                diagnoses: { type: array, items: { type: object } }
+                vitals: { type: object }
+                medications: { type: array, items: { type: object } }
+                notes: { type: string }
+                followUpRequired: { type: boolean }
+                followUpInDays: { type: integer }
+            example: { patientId: 6650f0c2a1b2c3d4e5f60719, diagnoses: [{ code: Z00.0, description: General examination }], vitals: { systolicBP: 120, diastolicBP: 80, heartRate: 75 }, notes: Synthetic note }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/MedicalRecord' } } } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    get:
+      summary: Own records (patient) or records authored (doctor)
+      parameters: [{ $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/Limit' }, { name: patientId, in: query, schema: { type: string } }]
+      responses:
+        '200': { description: OK }
+  /medical-records/patient/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      summary: Restricted medical history
+      parameters: [{ $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/Limit' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/MedicalRecord' } }, pagination: { $ref: '#/components/schemas/Pagination' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /medical-records/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      summary: Single record
+      responses:
+        '200': { description: OK }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /documents:
+    post:
+      summary: Upload a synthetic document (PDF, JPEG or PNG, max 5 MB)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                patientId: { type: string, description: Required for doctors }
+                name: { type: string }
+                category: { type: string }
+                provider: { type: string }
+      responses:
+        '201': { description: Uploaded, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Document' } } } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    get:
+      summary: Document metadata list
+      parameters: [{ $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/Limit' }, { name: patientId, in: query, schema: { type: string } }, { name: category, in: query, schema: { type: string } }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Document' } }, pagination: { $ref: '#/components/schemas/Pagination' } } } } } }
+  /documents/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      summary: Document metadata
+      responses:
+        '200': { description: OK }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      summary: Delete a document you uploaded
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /documents/{id}/download:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      summary: Download the file through an authorised stream
+      responses:
+        '200': { description: File bytes, content: { application/pdf: {}, image/jpeg: {}, image/png: {} } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /ai/chat:
+    post:
+      summary: Ask the educational assistant (proxied to FastAPI)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message: { type: string }
+                question: { type: string }
+                conversationId: { type: string }
+            example: { message: What is a routine checkup? }
+      responses:
+        '200':
+          description: Answer, or a safe fallback when the AI service is unavailable
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/ChatReply' } } }
+              examples:
+                answered: { value: { data: { answer: General educational information..., sources: [approved-health-reference], disclaimer: Not medical advice, emergency: false, fallback: false, conversationId: 6650f0c2a1b2c3d4e5f60730 } } }
+                fallback: { value: { data: { answer: The MediMind AI assistant is temporarily unavailable..., sources: [], disclaimer: MediMind AI provides general educational information only..., emergency: false, fallback: true, conversationId: 6650f0c2a1b2c3d4e5f60730 } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /ai/conversations:
+    get:
+      summary: Own conversation list
+      responses:
+        '200': { description: OK }
+  /ai/conversations/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      summary: Conversation with messages
+      responses:
+        '200': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      summary: Delete own conversation
+      responses:
+        '204': { description: Deleted }
+  /ai/no-show-risk:
+    post:
+      summary: No-show risk for an appointment (doctor, admin)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { appointmentId: { type: string } } } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { example: { data: { appointmentId: 6650f0c2a1b2c3d4e5f60740, features: { leadTimeDays: 7, priorMissedVisits: 1, priorVisits: 4, consultationType: online, rescheduleCount: 0 }, riskScore: 0.31, modelVersion: demo-v1 } } } } }
+        '503': { description: Prediction service unavailable }
+
+  /analytics/overview:
+    get:
+      summary: Aggregate dashboard metrics (admin)
+      parameters: [{ name: months, in: query, schema: { type: integer, default: 6, maximum: 24 } }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              example:
+                data:
+                  totals: { registeredPatients: 500, activeDoctors: 19, pendingDoctorVerifications: 1, appointmentsThisMonth: 210, appointmentsToday: 12, totalAppointments: 2000, aiConversations: 150 }
+                  changes: { patientGrowthPercent: 4.2, newDoctorsThisMonth: 1, appointmentsPercent: 8.5, aiConversationsPercent: 12 }
+                  attendanceRate: 88.9
+                  aiEngagementPercent: 26.4
+                  appointmentsByStatus: { completed: 1100, cancelled: 280, confirmed: 400, no_show: 140, pending: 80 }
+                  monthlyAppointments: [{ year: 2026, month: 11, label: Nov, total: 210, byStatus: { confirmed: 150 } }]
+                  appointmentsBySpecialty: [{ specialty: Cardiologist, totalAppointments: 320, completed: 180, doctorCount: 3, completionRate: 56.3 }]
+                  weekdayActivity: [{ day: Mon, total: 330 }]
+                  recentActivity: [{ type: appointment, title: New appointment booked with Dr. Aminda Kalpage, at: '2026-11-16T08:00:00.000Z' }]
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /analytics/appointments-by-doctor:
+    get:
+      summary: Aggregation A – appointment volume by doctor (admin)
+      responses: { '200': { description: OK } }
+  /analytics/appointments-by-specialty:
+    get:
+      summary: Aggregation B – appointments by doctor specialty (admin)
+      responses: { '200': { description: OK } }
+  /analytics/monthly-appointments:
+    get:
+      summary: Monthly appointments by status (admin)
+      responses: { '200': { description: OK } }
+  /analytics/weekday-activity:
+    get:
+      summary: Appointments per weekday (admin)
+      responses: { '200': { description: OK } }
+  /analytics/patient-growth:
+    get:
+      summary: Patient registrations per month (admin)
+      responses: { '200': { description: OK } }
+  /analytics/allergies:
+    get:
+      summary: Allergy prevalence from embedded allergies (admin)
+      responses: { '200': { description: OK } }
+  /analytics/ai-engagement:
+    get:
+      summary: AI assistant usage (admin)
+      responses: { '200': { description: OK } }
+  /analytics/me:
+    get:
+      summary: Personal dashboard figures (patient or doctor)
+      responses: { '200': { description: OK } }
+
+  /notifications:
+    get:
+      summary: Own notifications
+      parameters: [{ $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/Limit' }, { name: status, in: query, schema: { type: string, enum: [unread, read] } }]
+      responses: { '200': { description: OK } }
+  /notifications/read-all:
+    patch:
+      summary: Mark all as read
+      responses: { '200': { description: OK } }
+  /notifications/{id}/read:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      summary: Mark one as read
+      responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/NotFound' } }
+
+  /settings:
+    get:
+      summary: Platform settings (admin)
+      responses: { '200': { description: OK, content: { application/json: { example: { data: { requireDoctorVerification: true, maxBookingDaysAhead: 90, patientCancellationHours: 2 } } } } } }
+    put:
+      summary: Update platform settings (admin)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { requireDoctorVerification: { type: boolean }, maxBookingDaysAhead: { type: integer }, patientCancellationHours: { type: integer } } } } } }
+      responses: { '200': { description: OK } }

@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local data and backups
+database-backups/
+frontend-backup/
+
+# Operating system
+.DS_Store
+
+# Python
+__pycache__/
+.venv/
+venv/

@@ -1,0 +1,21 @@
+{
+  "capturedAt": "2026-11-16T09:52:51.762Z",
+  "query": "db.appointments.find({ doctorId: ObjectId(\"6afad271b933f3b990e661ea\"), startAt: { $gte: ISODate(\"2026-09-17T09:52:51.642Z\"), $lt: ISODate(\"2026-12-16T09:52:51.642Z\") } }).sort({ startAt: 1 })",
+  "totalDocumentsInCollection": 2000,
+  "before": {
+    "label": "Without compound index",
+    "winningPlan": "SORT <- COLLSCAN",
+    "nReturned": 85,
+    "totalKeysExamined": 0,
+    "totalDocsExamined": 2000,
+    "executionTimeMillis": 1
+  },
+  "after": {
+    "label": "With { doctorId: 1, startAt: 1 }",
+    "winningPlan": "FETCH <- IXSCAN",
+    "nReturned": 85,
+    "totalKeysExamined": 85,
+    "totalDocsExamined": 85,
+    "executionTimeMillis": 3
+  }
+}
